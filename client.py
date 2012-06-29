@@ -55,6 +55,8 @@ try:
     client.ping()
     print 'ping()'
 
+    client.authenticate('ow3qn32nroiwe')
+
     pg_ids = {}
     autogroups = {}
     autogroups_old = None
@@ -71,6 +73,7 @@ try:
                     pg_id = pg_ids[local_id]
 
                 except KeyError:
+
                     if proc.create_time > time.time() - PROCESS_MIN_AGE_SECONDS:
                         continue
 
@@ -113,7 +116,9 @@ try:
             except psutil.error.NoSuchProcess:
                 continue
 
-        client.store_bulk(authkey, autogroups.values())
+        to_send = filter(lambda pg: pg.cpu.sys != 0 or pg.mem.vms != 0, autogroups.values())
+
+        client.store_bulk(authkey, to_send)
 
         autogroups_old = autogroups
         autogroups = {}

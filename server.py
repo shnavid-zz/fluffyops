@@ -21,6 +21,7 @@
 
 import sys
 sys.path.append('gen-py')
+import os
 
 from reloco import ProcStatsService
 from reloco.ttypes import *
@@ -30,6 +31,39 @@ from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
 from thrift.server import TServer
 
+from hashlib import md5
+
+import rrdtool
+
+from sqlalchemy import create_engine
+from sqlalchemy import Column, Integer, String
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship, backref
+
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+Base = declarative_base()
+
+class System(Base):
+    __tablename__ = "systems"
+
+    id = Column(Integer, primary_key = True)
+    hostname = Column(String, unique = True, nullable = False)
+
+class SystemToken(Base):
+    __tablename__ = "system_tokens"
+
+    id = Column(Integer, primary_key = True)
+    token = Column(String, unique = True, nullable = False)
+    system_id = Column(Integer, ForeignKey(System.id))
+    system = relationship(System, backref=backref('tokens'))
+
+engine = create_engine('sqlite:///:memory:', echo=True)
+Session = sessionmaker(bind=engine)
+
+Base.metadata.create_all(engine)
+
 class ProcStatsServiceHandler:
 
     def __init__(self):
@@ -38,19 +72,39 @@ class ProcStatsServiceHandler:
     def ping(self):
         print 'ping()'
 
-    def authenticate(self, serverid):
-        return "aaa"
+    def authenticate(self, token):
+        session = Session()
+        tok = session.query(SystemToken).filter(SystemToken.token == token).first()
+        if not tok and AUTOCREATE_TOKENS:
+            tok = SystemToken()
+        print tok
+        return token
 
     def validate_authkey(self, authkey):
         return
 
     def get_process_group(self, authkey, username, procname):
-        return "aaa"
         print "get_process_group()", username, procname
-        return username + "." + procname
+        m = md5()
+        m.update(username+procname)
+        key = m.hexdigest()
+        rrd_fname = "rrd/%s.rrd" % (key)
+        if not os.path.exists(rrd_fname):
+            ret = rrdtool.create(rrd_fname, "--step", "60", "--start", '0',
+                             "DS:processes:GAUGE:300:U:U",
+                             "RRA:AVERAGE:0.5:1:600",
+                             "RRA:AVERAGE:0.5:6:700",
+ "RRA:AVERAGE:0.5:24:775",
+ "RRA:AVERAGE:0.5:288:797",
+ "RRA:MAX:0.5:1:600",
+ "RRA:MAX:0.5:6:700",
+ "RRA:MAX:0.5:24:775",
+ "RRA:MAX:0.5:444:797")
+        return key
 
     def _store(self, pgs):
         print 'store()', pgs
+        rrdtool.update("rrd/%s.rrd" % (pgs.pg_id), "N:%d" % (pgs.processes))
 
     def store_bulk(self, authkey, pgs_list):
         self.validate_authkey(authkey)

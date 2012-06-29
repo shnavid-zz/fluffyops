@@ -1,6 +1,5 @@
-#namespace py reloco-thrift
-
 const i32 PROCESS_MIN_AGE_SECONDS = 5
+const bool AUTOCREATE_TOKENS = true
 
 exception NotAuthorisedException {
     1: string errorMessage,
@@ -30,10 +29,10 @@ struct ProcGroupStats {
 service ProcStatsService {
   void ping();
 
-  string authenticate( 1:string serverid )
+  string authorize( 1:string token )
      throws ( 1:NotAuthorisedException e ),
 
-  string get_process_group(1: required string authkey, 2: required string username, 3: required string name);
+  string get_process_group(1: required string token, 2: required string username, 3: required string name);
 
-  oneway void store_bulk(1: required string authkey, 2: required list<ProcGroupStats> pgs_list);
+  oneway void store_bulk(1: required string token, 2: required list<ProcGroupStats> pgs_list);
 }
